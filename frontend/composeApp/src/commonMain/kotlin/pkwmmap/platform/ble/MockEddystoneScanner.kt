@@ -1,5 +1,8 @@
 package pkwmmap.platform.ble
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import pkwmmap.domain.model.BeaconNode
 import pkwmmap.domain.model.DetectedBeacon
 import pkwmmap.domain.model.EddystoneFrame
@@ -7,22 +10,15 @@ import pkwmmap.domain.positioning.RssiDistanceEstimator
 import kotlin.math.hypot
 import kotlin.random.Random
 
-enum class BleScanStatus {
-    IDLE,
-    SCANNING,
-    NO_HARDWARE,
-    BLUETOOTH_OFF,
-    MISSING_PERMISSIONS,
-    ERROR
-}
-
 /**
  * Simulates nearby BLE Eddystone advertisements (UID, URL, and TLM frames) in pure KMP Kotlin.
  *
  * Distances and RSSI values dynamically react to the simulated user position relative to
  * placed map beacons as well as unplaced ambient beacons in the environment.
  */
-class MockEddystoneScanner {
+class MockEddystoneScanner(
+    private val permissionsGranted: Boolean = true
+) : BleScanner {
     data class SimulatedPhysicalBeacon(
         val beaconId: String,
         val macAddress: String,
@@ -36,9 +32,17 @@ class MockEddystoneScanner {
         var pduCount: Long
     )
 
+    private val _status = MutableStateFlow(BleScanStatus.IDLE)
+    override val status: StateFlow<BleScanStatus> = _status.asStateFlow()
+
+    private val _statusDetail = MutableStateFlow("Mock BLE scanner idle")
+    override val statusDetail: StateFlow<String> = _statusDetail.asStateFlow()
+
     private val random = Random(42)
     private var spawnCounter = 1
     private var tickCounter = 0L
+    private var simulatedUserX: Float = 9.0f
+    private var simulatedUserY: Float = 10.0f
 
     private val ambientBeacons =
         mutableListOf(
@@ -128,12 +132,52 @@ class MockEddystoneScanner {
             )
         )
 
+    override fun hasRequiredPermissions(): Boolean = permissionsGranted
+
+    override fun startScanning() {
+        if (!hasRequiredPermissions()) {
+            _status.value = BleScanStatus.MISSING_PERMISSIONS
+            _statusDetail.value = "Mock BLE permissions missing."
+            return
+        }
+        _status.value = BleScanStatus.SCANNING
+        _statusDetail.value = "Simulating Eddystone & iNode BLE beacons..."
+    }
+
+    override fun stopScanning() {
+        _status.value = BleScanStatus.IDLE
+        _statusDetail.value = "Mock BLE scanner idle"
+    }
+
+    fun updateSimulatedPosition(
+        userX: Float,
+        userY: Float
+    ) {
+        simulatedUserX = userX
+        simulatedUserY = userY
+    }
+
+    override fun snapshot(
+        placedNodes: List<BeaconNode>,
+        includeAllBle: Boolean,
+        maxAgeMillis: Long
+    ): List<DetectedBeacon> {
+        if (_status.value != BleScanStatus.SCANNING) return emptyList()
+        return scanTick(
+            userX = simulatedUserX,
+            userY = simulatedUserY,
+            placedNodes = placedNodes
+        )
+    }
+
     fun scanTick(
         userX: Float,
         userY: Float,
         placedNodes: List<BeaconNode>,
         nowMillis: Long = nextTickMillis()
     ): List<DetectedBeacon> {
+        simulatedUserX = userX
+        simulatedUserY = userY
         val placedById = placedNodes.associateBy { it.beaconId }
 
         return ambientBeacons
