@@ -337,6 +337,7 @@ class RealBleEddystoneScanner(
                     add(Manifest.permission.BLUETOOTH)
                     add(Manifest.permission.BLUETOOTH_ADMIN)
                 }
+                add(Manifest.permission.ACCESS_COARSE_LOCATION)
                 add(Manifest.permission.ACCESS_FINE_LOCATION)
             }
     }
