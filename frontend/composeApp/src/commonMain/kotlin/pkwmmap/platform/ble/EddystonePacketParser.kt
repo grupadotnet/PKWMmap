@@ -7,36 +7,37 @@ import pkwmmap.domain.model.EddystoneFrame
  * Apple iBeacon manufacturer payloads, and iNode manufacturer IDs in pure KMP Kotlin.
  */
 object EddystonePacketParser {
-
     const val FRAME_TYPE_UID: Int = 0x00
     const val FRAME_TYPE_URL: Int = 0x10
     const val FRAME_TYPE_TLM: Int = 0x20
 
     private const val HEX_CHARS = "0123456789ABCDEF"
 
-    private val URL_SCHEMES = arrayOf(
-        "http://www.",
-        "https://www.",
-        "http://",
-        "https://"
-    )
+    private val URL_SCHEMES =
+        arrayOf(
+            "http://www.",
+            "https://www.",
+            "http://",
+            "https://"
+        )
 
-    private val URL_EXPANSIONS = mapOf(
-        0x00 to ".com/",
-        0x01 to ".org/",
-        0x02 to ".edu/",
-        0x03 to ".net/",
-        0x04 to ".info/",
-        0x05 to ".biz/",
-        0x06 to ".gov/",
-        0x07 to ".com",
-        0x08 to ".org",
-        0x09 to ".edu",
-        0x0A to ".net",
-        0x0B to ".info",
-        0x0C to ".biz",
-        0x0D to ".gov"
-    )
+    private val URL_EXPANSIONS =
+        mapOf(
+            0x00 to ".com/",
+            0x01 to ".org/",
+            0x02 to ".edu/",
+            0x03 to ".net/",
+            0x04 to ".info/",
+            0x05 to ".biz/",
+            0x06 to ".gov/",
+            0x07 to ".com",
+            0x08 to ".org",
+            0x09 to ".edu",
+            0x0A to ".net",
+            0x0B to ".info",
+            0x0C to ".biz",
+            0x0D to ".gov"
+        )
 
     fun parse(serviceData: ByteArray): EddystoneFrame? {
         if (serviceData.isEmpty()) return null
@@ -66,8 +67,7 @@ object EddystonePacketParser {
         )
     }
 
-    fun isInodeManufacturerId(companyId: Int): Boolean =
-        companyId in 0x9082..0x908F || companyId in 0x8290..0x829F
+    fun isInodeManufacturerId(companyId: Int): Boolean = companyId in 0x9082..0x908F || companyId in 0x8290..0x829F
 
     fun ByteArray.toHexString(): String {
         val chars = CharArray(size * 2)
@@ -141,13 +141,20 @@ object EddystonePacketParser {
         return "${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20, 32)}"
     }
 
-    private fun readUInt16BigEndian(data: ByteArray, offset: Int): Int =
-        ((data[offset].toInt() and 0xFF) shl 8) or (data[offset + 1].toInt() and 0xFF)
+    private fun readUInt16BigEndian(
+        data: ByteArray,
+        offset: Int
+    ): Int = ((data[offset].toInt() and 0xFF) shl 8) or (data[offset + 1].toInt() and 0xFF)
 
-    private fun readInt16BigEndian(data: ByteArray, offset: Int): Int =
-        (data[offset].toInt() shl 8) or (data[offset + 1].toInt() and 0xFF)
+    private fun readInt16BigEndian(
+        data: ByteArray,
+        offset: Int
+    ): Int = (data[offset].toInt() shl 8) or (data[offset + 1].toInt() and 0xFF)
 
-    private fun readUInt32BigEndian(data: ByteArray, offset: Int): Long =
+    private fun readUInt32BigEndian(
+        data: ByteArray,
+        offset: Int
+    ): Long =
         ((data[offset].toLong() and 0xFFL) shl 24) or
             ((data[offset + 1].toLong() and 0xFFL) shl 16) or
             ((data[offset + 2].toLong() and 0xFFL) shl 8) or

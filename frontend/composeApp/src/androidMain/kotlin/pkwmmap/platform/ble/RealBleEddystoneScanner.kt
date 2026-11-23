@@ -26,8 +26,9 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * Real Android BLE scanner for Eddystone (0xFEAA), Apple iBeacon, and iNode BLE beacons.
  */
-class RealBleEddystoneScanner(private val context: Context) {
-
+class RealBleEddystoneScanner(
+    private val context: Context
+) {
     private val bluetoothManager: BluetoothManager? =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     private val bluetoothAdapter: BluetoothAdapter? get() = bluetoothManager?.adapter
@@ -44,21 +45,25 @@ class RealBleEddystoneScanner(private val context: Context) {
     private val telemetryByMac = ConcurrentHashMap<String, EddystoneFrame.TlmFrame>()
     private var isScanning = false
 
-    private val scanCallback = object : ScanCallback() {
-        override fun onScanResult(callbackType: Int, result: ScanResult) {
-            handleScanResult(result)
-        }
+    private val scanCallback =
+        object : ScanCallback() {
+            override fun onScanResult(
+                callbackType: Int,
+                result: ScanResult
+            ) {
+                handleScanResult(result)
+            }
 
-        override fun onBatchScanResults(results: MutableList<ScanResult>) {
-            results.forEach(::handleScanResult)
-        }
+            override fun onBatchScanResults(results: MutableList<ScanResult>) {
+                results.forEach(::handleScanResult)
+            }
 
-        override fun onScanFailed(errorCode: Int) {
-            isScanning = false
-            _status.value = BleScanStatus.ERROR
-            _statusDetail.value = "BLE scan failed (error $errorCode)"
+            override fun onScanFailed(errorCode: Int) {
+                isScanning = false
+                _status.value = BleScanStatus.ERROR
+                _statusDetail.value = "BLE scan failed (error $errorCode)"
+            }
         }
-    }
 
     fun hasRequiredPermissions(): Boolean {
         val perms = requiredPermissions()
@@ -94,9 +99,11 @@ class RealBleEddystoneScanner(private val context: Context) {
             return
         }
 
-        val settings = ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-            .build()
+        val settings =
+            ScanSettings
+                .Builder()
+                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                .build()
 
         // Scan without restrictive hardware filter so both Eddystone (0xFEAA) and iNode
         // advertisements are received reliably across Android chipsets.
@@ -131,21 +138,21 @@ class RealBleEddystoneScanner(private val context: Context) {
         pruneStale(discoveredBeacons, now, maxAgeMillis)
         pruneStale(allDiscoveredBle, now, maxAgeMillis)
 
-        val source = if (includeAllBle) {
-            val merged = LinkedHashMap<String, DetectedBeacon>()
-            allDiscoveredBle.values.forEach { merged[it.macAddress] = it }
-            discoveredBeacons.values.forEach { merged[it.macAddress] = it }
-            merged.values
-        } else {
-            discoveredBeacons.values
-        }
+        val source =
+            if (includeAllBle) {
+                val merged = LinkedHashMap<String, DetectedBeacon>()
+                allDiscoveredBle.values.forEach { merged[it.macAddress] = it }
+                discoveredBeacons.values.forEach { merged[it.macAddress] = it }
+                merged.values
+            } else {
+                discoveredBeacons.values
+            }
 
         return source
             .map { beacon ->
                 val placed = placedById[beacon.beaconId]
                 if (placed != null) beacon.copy(label = placed.label) else beacon
-            }
-            .sortedByDescending { it.rssi }
+            }.sortedByDescending { it.rssi }
     }
 
     private fun pruneStale(
@@ -171,74 +178,27 @@ class RealBleEddystoneScanner(private val context: Context) {
         val mfgHex = extractManufacturerHex(record.manufacturerSpecificData)
 
         val fallbackTx = if (record.txPowerLevel != Int.MIN_VALUE) record.txPowerLevel else -20
-        allDiscoveredBle["BLE:$mac"] = DetectedBeacon(
-            beaconId = "BLE:$mac",
-            macAddress = mac,
-            label = deviceName.ifBlank { "BLE $mac" },
-            rssi = rssi,
-            txPowerAt0m = fallbackTx,
-            estimatedDistanceMeters = RssiDistanceEstimator.estimateDistanceMeters(rssi, fallbackTx),
-            frame = EddystoneFrame.InodeFrame(
-                deviceName = deviceName.ifBlank { mac },
-                manufacturerHex = mfgHex
-            ),
-            telemetry = telemetryByMac[mac],
-            lastSeenMillis = now
-        )
+        allDiscoveredBle["BLE:$mac"] =
+            DetectedBeacon(
+                beaconId = "BLE:$mac",
+                macAddress = mac,
+                label = deviceName.ifBlank { "BLE $mac" },
+                rssi = rssi,
+                txPowerAt0m = fallbackTx,
+                estimatedDistanceMeters = RssiDistanceEstimator.estimateDistanceMeters(rssi, fallbackTx),
+                frame =
+                    EddystoneFrame.InodeFrame(
+                        deviceName = deviceName.ifBlank { mac },
+                        manufacturerHex = mfgHex
+                    ),
+                telemetry = telemetryByMac[mac],
+                lastSeenMillis = now
+            )
 
         // 1. Check Eddystone Service Data (0xFEAA)
         val eddystoneData = record.getServiceData(EDDYSTONE_SERVICE_UUID)
         if (eddystoneData != null) {
-            val frame = EddystonePacketParser.parse(eddystoneData) ?: return
-            when (frame) {
-                is EddystoneFrame.TlmFrame -> {
-                    telemetryByMac[mac] = frame
-                    discoveredBeacons.entries.forEach { (key, existing) ->
-                        if (existing.macAddress == mac) {
-                            discoveredBeacons[key] = existing.copy(
-                                telemetry = frame,
-                                rssi = rssi,
-                                lastSeenMillis = now
-                            )
-                        }
-                    }
-                }
-                is EddystoneFrame.UidFrame -> {
-                    val beaconId = "UID:${frame.instanceId}"
-                    val dist = RssiDistanceEstimator.estimateDistanceMeters(rssi, frame.rangingDataTxPower)
-                    val label = deviceName.ifBlank { "Eddystone ${frame.instanceId.takeLast(6)}" }
-                    discoveredBeacons[beaconId] = DetectedBeacon(
-                        beaconId = beaconId,
-                        macAddress = mac,
-                        label = label,
-                        rssi = rssi,
-                        txPowerAt0m = frame.rangingDataTxPower,
-                        estimatedDistanceMeters = dist,
-                        frame = frame,
-                        telemetry = telemetryByMac[mac],
-                        lastSeenMillis = now
-                    )
-                }
-                is EddystoneFrame.UrlFrame -> {
-                    val beaconId = "URL:$mac"
-                    val dist = RssiDistanceEstimator.estimateDistanceMeters(rssi, frame.rangingDataTxPower)
-                    val label = deviceName.ifBlank { frame.url.removePrefix("https://").removePrefix("http://") }
-                    discoveredBeacons[beaconId] = DetectedBeacon(
-                        beaconId = beaconId,
-                        macAddress = mac,
-                        label = label,
-                        rssi = rssi,
-                        txPowerAt0m = frame.rangingDataTxPower,
-                        estimatedDistanceMeters = dist,
-                        frame = frame,
-                        telemetry = telemetryByMac[mac],
-                        lastSeenMillis = now
-                    )
-                }
-                is EddystoneFrame.IBeaconFrame,
-                is EddystoneFrame.InodeFrame,
-                is EddystoneFrame.UnknownFrame -> Unit
-            }
+            handleEddystoneData(eddystoneData, mac, deviceName, rssi, now)
             return
         }
 
@@ -248,39 +208,112 @@ class RealBleEddystoneScanner(private val context: Context) {
         if (iBeaconFrame != null) {
             val txAt0m = RssiDistanceEstimator.txPowerAt1mTo0m(iBeaconFrame.txPowerAt1m)
             val beaconId = "IBEACON:${iBeaconFrame.uuid}:${iBeaconFrame.major}:${iBeaconFrame.minor}"
-            discoveredBeacons[beaconId] = DetectedBeacon(
-                beaconId = beaconId,
-                macAddress = mac,
-                label = deviceName.ifBlank { "iBeacon ${iBeaconFrame.major}:${iBeaconFrame.minor}" },
-                rssi = rssi,
-                txPowerAt0m = txAt0m,
-                estimatedDistanceMeters = RssiDistanceEstimator.estimateDistanceMeters(rssi, txAt0m),
-                frame = iBeaconFrame,
-                telemetry = telemetryByMac[mac],
-                lastSeenMillis = now
-            )
+            discoveredBeacons[beaconId] =
+                DetectedBeacon(
+                    beaconId = beaconId,
+                    macAddress = mac,
+                    label = deviceName.ifBlank { "iBeacon ${iBeaconFrame.major}:${iBeaconFrame.minor}" },
+                    rssi = rssi,
+                    txPowerAt0m = txAt0m,
+                    estimatedDistanceMeters = RssiDistanceEstimator.estimateDistanceMeters(rssi, txAt0m),
+                    frame = iBeaconFrame,
+                    telemetry = telemetryByMac[mac],
+                    lastSeenMillis = now
+                )
             return
         }
 
         // 3. Check iNode BLE beacons by name or Elsat/iNode manufacturer ID
-        val isInodeMfg = (0x9082..0x908F).any { record.getManufacturerSpecificData(it) != null } ||
-            (0x8290..0x829F).any { record.getManufacturerSpecificData(it) != null }
+        val isInodeMfg =
+            (0x9082..0x908F).any { record.getManufacturerSpecificData(it) != null } ||
+                (0x8290..0x829F).any { record.getManufacturerSpecificData(it) != null }
         if (deviceName.contains("inode", ignoreCase = true) || isInodeMfg) {
             val beaconId = "INODE:$mac"
-            discoveredBeacons[beaconId] = DetectedBeacon(
-                beaconId = beaconId,
-                macAddress = mac,
-                label = deviceName.ifBlank { "iNode $mac" },
-                rssi = rssi,
-                txPowerAt0m = fallbackTx,
-                estimatedDistanceMeters = RssiDistanceEstimator.estimateDistanceMeters(rssi, fallbackTx),
-                frame = EddystoneFrame.InodeFrame(
-                    deviceName = deviceName.ifBlank { mac },
-                    manufacturerHex = mfgHex
-                ),
-                telemetry = telemetryByMac[mac],
-                lastSeenMillis = now
-            )
+            discoveredBeacons[beaconId] =
+                DetectedBeacon(
+                    beaconId = beaconId,
+                    macAddress = mac,
+                    label = deviceName.ifBlank { "iNode $mac" },
+                    rssi = rssi,
+                    txPowerAt0m = fallbackTx,
+                    estimatedDistanceMeters = RssiDistanceEstimator.estimateDistanceMeters(rssi, fallbackTx),
+                    frame =
+                        EddystoneFrame.InodeFrame(
+                            deviceName = deviceName.ifBlank { mac },
+                            manufacturerHex = mfgHex
+                        ),
+                    telemetry = telemetryByMac[mac],
+                    lastSeenMillis = now
+                )
+        }
+    }
+
+    private fun handleEddystoneData(
+        eddystoneData: ByteArray,
+        mac: String,
+        deviceName: String,
+        rssi: Int,
+        now: Long
+    ) {
+        val frame = EddystonePacketParser.parse(eddystoneData) ?: return
+        when (frame) {
+            is EddystoneFrame.TlmFrame -> updateTelemetry(mac, frame, rssi, now)
+            is EddystoneFrame.UidFrame -> {
+                val beaconId = "UID:${frame.instanceId}"
+                val dist = RssiDistanceEstimator.estimateDistanceMeters(rssi, frame.rangingDataTxPower)
+                val label = deviceName.ifBlank { "Eddystone ${frame.instanceId.takeLast(6)}" }
+                discoveredBeacons[beaconId] =
+                    DetectedBeacon(
+                        beaconId = beaconId,
+                        macAddress = mac,
+                        label = label,
+                        rssi = rssi,
+                        txPowerAt0m = frame.rangingDataTxPower,
+                        estimatedDistanceMeters = dist,
+                        frame = frame,
+                        telemetry = telemetryByMac[mac],
+                        lastSeenMillis = now
+                    )
+            }
+            is EddystoneFrame.UrlFrame -> {
+                val beaconId = "URL:$mac"
+                val dist = RssiDistanceEstimator.estimateDistanceMeters(rssi, frame.rangingDataTxPower)
+                val label = deviceName.ifBlank { frame.url.removePrefix("https://").removePrefix("http://") }
+                discoveredBeacons[beaconId] =
+                    DetectedBeacon(
+                        beaconId = beaconId,
+                        macAddress = mac,
+                        label = label,
+                        rssi = rssi,
+                        txPowerAt0m = frame.rangingDataTxPower,
+                        estimatedDistanceMeters = dist,
+                        frame = frame,
+                        telemetry = telemetryByMac[mac],
+                        lastSeenMillis = now
+                    )
+            }
+            is EddystoneFrame.IBeaconFrame,
+            is EddystoneFrame.InodeFrame,
+            is EddystoneFrame.UnknownFrame -> Unit
+        }
+    }
+
+    private fun updateTelemetry(
+        mac: String,
+        frame: EddystoneFrame.TlmFrame,
+        rssi: Int,
+        now: Long
+    ) {
+        telemetryByMac[mac] = frame
+        discoveredBeacons.entries.forEach { (key, existing) ->
+            if (existing.macAddress == mac) {
+                discoveredBeacons[key] =
+                    existing.copy(
+                        telemetry = frame,
+                        rssi = rssi,
+                        lastSeenMillis = now
+                    )
+            }
         }
     }
 
@@ -295,15 +328,16 @@ class RealBleEddystoneScanner(private val context: Context) {
         val EDDYSTONE_SERVICE_UUID: ParcelUuid =
             ParcelUuid.fromString("0000FEAA-0000-1000-8000-00805F9B34FB")
 
-        fun requiredPermissions(): List<String> = buildList {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                add(Manifest.permission.BLUETOOTH_SCAN)
-                add(Manifest.permission.BLUETOOTH_CONNECT)
-            } else {
-                add(Manifest.permission.BLUETOOTH)
-                add(Manifest.permission.BLUETOOTH_ADMIN)
+        fun requiredPermissions(): List<String> =
+            buildList {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    add(Manifest.permission.BLUETOOTH_SCAN)
+                    add(Manifest.permission.BLUETOOTH_CONNECT)
+                } else {
+                    add(Manifest.permission.BLUETOOTH)
+                    add(Manifest.permission.BLUETOOTH_ADMIN)
+                }
+                add(Manifest.permission.ACCESS_FINE_LOCATION)
             }
-            add(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
     }
 }

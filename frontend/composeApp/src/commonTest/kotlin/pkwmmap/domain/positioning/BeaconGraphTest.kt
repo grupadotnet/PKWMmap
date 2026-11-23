@@ -8,7 +8,6 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 class BeaconGraphTest {
-
     @Test
     fun `finds shortest path via Dijkstra instead of longer detour`() {
         val a = BeaconNode("A", "b1", "Lobby", 0f, 0f)
@@ -16,12 +15,13 @@ class BeaconGraphTest {
         val c = BeaconNode("C", "b3", "Lab", 10f, 0f)
         val d = BeaconNode("D", "b4", "Detour", 5f, 8f)
 
-        val edges = listOf(
-            MapEdge("A", "B", 5f),
-            MapEdge("B", "C", 5f),
-            MapEdge("A", "D", 9.4f),
-            MapEdge("D", "C", 9.4f)
-        )
+        val edges =
+            listOf(
+                MapEdge("A", "B", 5f),
+                MapEdge("B", "C", 5f),
+                MapEdge("A", "D", 9.4f),
+                MapEdge("D", "C", 9.4f)
+            )
 
         val path = BeaconGraph.findShortestPath(listOf(a, b, c, d), edges, "A", "C")
         assertNotNull(path)

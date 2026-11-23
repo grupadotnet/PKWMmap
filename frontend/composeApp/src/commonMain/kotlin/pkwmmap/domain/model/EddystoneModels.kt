@@ -48,7 +48,9 @@ sealed interface EddystoneFrame {
         override val frameTypeLabel: String = "iNode"
     }
 
-    data class UnknownFrame(val rawFrameType: Int) : EddystoneFrame {
+    data class UnknownFrame(
+        val rawFrameType: Int
+    ) : EddystoneFrame {
         override val frameTypeLabel: String = "0x${rawFrameType.toString(16).uppercase()}"
     }
 }

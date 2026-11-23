@@ -15,20 +15,29 @@ object RssiDistanceEstimator {
 
     fun txPowerAt1mTo0m(txPowerAt1m: Int): Int = txPowerAt1m + ONE_METER_PATH_LOSS_DB.toInt()
 
-    fun estimateDistanceFromTxAt1m(rssi: Int, txPowerAt1m: Int = -59): Double {
+    fun estimateDistanceFromTxAt1m(
+        rssi: Int,
+        txPowerAt1m: Int = -59
+    ): Double {
         if (rssi == 0) return -1.0
         val exponent = (txPowerAt1m - rssi) / (10.0 * INDOOR_PATH_LOSS_EXPONENT)
         return 10.0.pow(exponent).coerceIn(0.2, 50.0)
     }
 
-    fun estimateDistanceMeters(rssi: Int, txPowerAt0m: Int): Double {
+    fun estimateDistanceMeters(
+        rssi: Int,
+        txPowerAt0m: Int
+    ): Double {
         if (rssi == 0) return -1.0
         val txPowerAt1m = txPowerAt0m - ONE_METER_PATH_LOSS_DB
         val exponent = (txPowerAt1m - rssi) / (10.0 * INDOOR_PATH_LOSS_EXPONENT)
         return 10.0.pow(exponent).coerceIn(0.2, 50.0)
     }
 
-    fun rssiForDistanceMeters(distanceMeters: Double, txPowerAt0m: Int): Int {
+    fun rssiForDistanceMeters(
+        distanceMeters: Double,
+        txPowerAt0m: Int
+    ): Int {
         val clamped = distanceMeters.coerceAtLeast(0.2)
         val txPowerAt1m = txPowerAt0m - ONE_METER_PATH_LOSS_DB
         val rssi = txPowerAt1m - 10.0 * INDOOR_PATH_LOSS_EXPONENT * log10(clamped)

@@ -7,7 +7,6 @@ import pkwmmap.domain.model.FloorPlanState
  * In-memory KMP cache for floorplan beacon placements and cached `GET /beacons` responses.
  */
 class BeaconMapStorage {
-
     private var cachedFloorPlan: FloorPlanState? = null
     private val cachedBeaconsById = LinkedHashMap<String, BeaconNode>()
 

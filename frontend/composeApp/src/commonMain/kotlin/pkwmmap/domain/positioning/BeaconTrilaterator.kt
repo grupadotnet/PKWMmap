@@ -13,7 +13,6 @@ data class BeaconMeasurement(
  * weighted interpolation (weighted lerp) across detected placed beacons.
  */
 object BeaconTrilaterator {
-
     fun estimatePosition(
         detectedBeacons: List<DetectedBeacon>,
         placedNodes: List<BeaconNode>,
@@ -43,11 +42,12 @@ object BeaconTrilaterator {
         previousPosition: Pair<Float, Float>? = null,
         smoothingAlpha: Float = 0.35f
     ): Pair<Float, Float>? {
-        val floorNodes = if (floorId != null) {
-            placedNodes.filter { it.floorId == null || it.floorId == floorId }
-        } else {
-            placedNodes
-        }
+        val floorNodes =
+            if (floorId != null) {
+                placedNodes.filter { it.floorId == null || it.floorId == floorId }
+            } else {
+                placedNodes
+            }
         val measurements = matchMeasurements(detectedBeacons, floorNodes)
         if (measurements.isEmpty()) return null
 
@@ -83,15 +83,17 @@ object BeaconTrilaterator {
     ): List<BeaconMeasurement> {
         val byBeaconId = placedNodes.associateBy { it.beaconId.lowercase() }
         val byId = placedNodes.associateBy { it.id.lowercase() }
-        val byMac = placedNodes
-            .mapNotNull { node -> node.macAddress?.lowercase()?.let { it to node } }
-            .toMap()
+        val byMac =
+            placedNodes
+                .mapNotNull { node -> node.macAddress?.lowercase()?.let { it to node } }
+                .toMap()
 
         return detectedBeacons.mapNotNull { beacon ->
-            val node = byBeaconId[beacon.beaconId.lowercase()]
-                ?: byId[beacon.beaconId.lowercase()]
-                ?: byMac[beacon.macAddress.lowercase()]
-                ?: return@mapNotNull null
+            val node =
+                byBeaconId[beacon.beaconId.lowercase()]
+                    ?: byId[beacon.beaconId.lowercase()]
+                    ?: byMac[beacon.macAddress.lowercase()]
+                    ?: return@mapNotNull null
             val dist = beacon.estimatedDistanceMeters.coerceIn(0.25, 35.0)
             BeaconMeasurement(node = node, distanceMeters = dist)
         }
@@ -102,15 +104,17 @@ object BeaconTrilaterator {
         y: Float,
         previousPosition: Pair<Float, Float>?,
         smoothingAlpha: Float
-    ): Pair<Float, Float> {
-        return if (previousPosition != null) {
+    ): Pair<Float, Float> =
+        if (previousPosition != null) {
             lerp(previousPosition.first, x, smoothingAlpha) to
                 lerp(previousPosition.second, y, smoothingAlpha)
         } else {
             x to y
         }
-    }
 
-    private fun lerp(start: Float, end: Float, fraction: Float): Float =
-        start + (end - start) * fraction
+    private fun lerp(
+        start: Float,
+        end: Float,
+        fraction: Float
+    ): Float = start + (end - start) * fraction
 }

@@ -1,6 +1,8 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("io.gitlab.arturbosch.detekt")
+    id("org.jlleitschuh.gradle.ktlint")
 }
 
 android {
@@ -30,6 +32,12 @@ android {
         compose = true
     }
 
+    lint {
+        abortOnError = true
+        warningsAsErrors = false
+        checkReleaseBuilds = false
+    }
+
     sourceSets {
         getByName("main") {
             manifest.srcFile("src/androidMain/AndroidManifest.xml")
@@ -42,6 +50,24 @@ android {
     }
 }
 
+detekt {
+    buildUponDefaultConfig = true
+    allRules = false
+    config.setFrom(files("$rootDir/config/detekt/detekt.yml"))
+    source.setFrom(
+        files(
+            "src/commonMain/kotlin",
+            "src/androidMain/kotlin",
+            "src/commonTest/kotlin"
+        )
+    )
+}
+
+ktlint {
+    android.set(true)
+    ignoreFailures.set(false)
+}
+
 dependencies {
     implementation("androidx.core:core-ktx:1.18.0")
     implementation("androidx.activity:activity-compose:1.10.1")
@@ -51,6 +77,9 @@ dependencies {
     implementation("androidx.compose.foundation:foundation:1.10.5")
     implementation("androidx.compose.material3:material3:1.5.0-beta01")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+
+    detektPlugins("io.nlopez.compose.rules:detekt:0.6.8")
+    ktlintRuleset("io.nlopez.compose.rules:ktlint:0.6.8")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation(kotlin("test-junit"))

@@ -25,8 +25,10 @@ data class MapEdge(
     val toNodeId: String,
     val distanceMeters: Float
 ) {
-    fun connects(a: String, b: String): Boolean =
-        (fromNodeId == a && toNodeId == b) || (fromNodeId == b && toNodeId == a)
+    fun connects(
+        a: String,
+        b: String
+    ): Boolean = (fromNodeId == a && toNodeId == b) || (fromNodeId == b && toNodeId == a)
 }
 
 /**
