@@ -10,6 +10,7 @@ object EddystonePacketParser {
     const val FRAME_TYPE_UID: Int = 0x00
     const val FRAME_TYPE_URL: Int = 0x10
     const val FRAME_TYPE_TLM: Int = 0x20
+    const val APPLE_COMPANY_ID: Int = 0x004C
 
     private const val HEX_CHARS = "0123456789ABCDEF"
 
@@ -68,6 +69,29 @@ object EddystonePacketParser {
     }
 
     fun isInodeManufacturerId(companyId: Int): Boolean = companyId in 0x9082..0x908F || companyId in 0x8290..0x829F
+
+    fun formatManufacturerHex(
+        companyId: Int,
+        payload: ByteArray
+    ): String = "0x${companyId.toString(16).uppercase()}:${payload.toHexString()}"
+
+    fun parseManufacturerData(
+        companyId: Int,
+        payload: ByteArray,
+        deviceName: String = ""
+    ): EddystoneFrame? {
+        if (companyId == APPLE_COMPANY_ID) {
+            val iBeacon = parseIBeacon(payload)
+            if (iBeacon != null) return iBeacon
+        }
+        if (isInodeManufacturerId(companyId) || deviceName.contains("inode", ignoreCase = true)) {
+            return EddystoneFrame.InodeFrame(
+                deviceName = deviceName,
+                manufacturerHex = formatManufacturerHex(companyId, payload)
+            )
+        }
+        return null
+    }
 
     fun ByteArray.toHexString(): String {
         val chars = CharArray(size * 2)

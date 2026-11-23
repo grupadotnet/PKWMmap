@@ -13,6 +13,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.ParcelUuid
 import androidx.core.content.ContextCompat
+import androidx.core.util.isEmpty
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,7 +21,6 @@ import pkwmmap.domain.model.BeaconNode
 import pkwmmap.domain.model.DetectedBeacon
 import pkwmmap.domain.model.EddystoneFrame
 import pkwmmap.domain.positioning.RssiDistanceEstimator
-import pkwmmap.platform.ble.EddystonePacketParser.toHexString
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -28,17 +28,17 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class RealBleEddystoneScanner(
     private val context: Context
-) {
+) : BleScanner {
     private val bluetoothManager: BluetoothManager? =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     private val bluetoothAdapter: BluetoothAdapter? get() = bluetoothManager?.adapter
     private val bleScanner: BluetoothLeScanner? get() = bluetoothAdapter?.bluetoothLeScanner
 
     private val _status = MutableStateFlow(BleScanStatus.IDLE)
-    val status: StateFlow<BleScanStatus> = _status.asStateFlow()
+    override val status: StateFlow<BleScanStatus> = _status.asStateFlow()
 
     private val _statusDetail = MutableStateFlow("BLE scanner idle")
-    val statusDetail: StateFlow<String> = _statusDetail.asStateFlow()
+    override val statusDetail: StateFlow<String> = _statusDetail.asStateFlow()
 
     private val discoveredBeacons = ConcurrentHashMap<String, DetectedBeacon>()
     private val allDiscoveredBle = ConcurrentHashMap<String, DetectedBeacon>()
@@ -65,15 +65,27 @@ class RealBleEddystoneScanner(
             }
         }
 
-    fun hasRequiredPermissions(): Boolean {
-        val perms = requiredPermissions()
-        return perms.all {
-            ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+    override fun hasRequiredPermissions(): Boolean = missingPermissions().isEmpty()
+
+    fun missingPermissions(): List<String> =
+        requiredPermissions().filter {
+            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+    fun refreshPermissionStatus() {
+        if (hasRequiredPermissions()) {
+            if (_status.value == BleScanStatus.MISSING_PERMISSIONS) {
+                _status.value = BleScanStatus.IDLE
+                _statusDetail.value = "BLE permissions granted. Ready to scan."
+            }
+        } else if (!isScanning) {
+            _status.value = BleScanStatus.MISSING_PERMISSIONS
+            _statusDetail.value = "Grant Bluetooth & Location permissions to scan real beacons."
         }
     }
 
     @SuppressLint("MissingPermission")
-    fun startScanning() {
+    override fun startScanning() {
         if (isScanning) return
 
         val adapter = bluetoothAdapter
@@ -114,7 +126,7 @@ class RealBleEddystoneScanner(
     }
 
     @SuppressLint("MissingPermission")
-    fun stopScanning() {
+    override fun stopScanning() {
         if (!isScanning) return
         if (hasRequiredPermissions()) {
             try {
@@ -125,15 +137,20 @@ class RealBleEddystoneScanner(
         }
         isScanning = false
         _status.value = BleScanStatus.IDLE
+        _statusDetail.value = "BLE scanner idle"
     }
 
-    fun snapshot(
+    override fun snapshot(
         placedNodes: List<BeaconNode>,
-        includeAllBle: Boolean = false,
-        maxAgeMillis: Long = 15_000L
+        includeAllBle: Boolean,
+        maxAgeMillis: Long
     ): List<DetectedBeacon> {
         val now = System.currentTimeMillis()
-        val placedById = placedNodes.associateBy { it.beaconId }
+        val placedById = placedNodes.associateBy { it.beaconId.lowercase() }
+        val placedByMac =
+            placedNodes
+                .mapNotNull { node -> node.macAddress?.lowercase()?.let { it to node } }
+                .toMap()
 
         pruneStale(discoveredBeacons, now, maxAgeMillis)
         pruneStale(allDiscoveredBle, now, maxAgeMillis)
@@ -150,7 +167,9 @@ class RealBleEddystoneScanner(
 
         return source
             .map { beacon ->
-                val placed = placedById[beacon.beaconId]
+                val placed =
+                    placedById[beacon.beaconId.lowercase()]
+                        ?: placedByMac[beacon.macAddress.lowercase()]
                 if (placed != null) beacon.copy(label = placed.label) else beacon
             }.sortedByDescending { it.rssi }
     }
@@ -318,10 +337,10 @@ class RealBleEddystoneScanner(
     }
 
     private fun extractManufacturerHex(sparse: android.util.SparseArray<ByteArray>?): String {
-        if (sparse == null || sparse.size() == 0) return ""
+        if (sparse == null || sparse.isEmpty()) return ""
         val key = sparse.keyAt(0)
         val bytes = sparse.valueAt(0) ?: return ""
-        return "0x${key.toString(16).uppercase()}:${bytes.toHexString()}"
+        return EddystonePacketParser.formatManufacturerHex(key, bytes)
     }
 
     companion object {
@@ -336,6 +355,16 @@ class RealBleEddystoneScanner(
                 } else {
                     add(Manifest.permission.BLUETOOTH)
                     add(Manifest.permission.BLUETOOTH_ADMIN)
+                }
+                add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                add(Manifest.permission.ACCESS_FINE_LOCATION)
+            }
+
+        fun requiredRuntimePermissions(): List<String> =
+            buildList {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    add(Manifest.permission.BLUETOOTH_SCAN)
+                    add(Manifest.permission.BLUETOOTH_CONNECT)
                 }
                 add(Manifest.permission.ACCESS_COARSE_LOCATION)
                 add(Manifest.permission.ACCESS_FINE_LOCATION)
