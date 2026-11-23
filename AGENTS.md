@@ -66,6 +66,24 @@ pkwmmap/
 - Keep changes scoped to the requested task; do not refactor unrelated packages.
 - Update `docs/api-contract.md` whenever mobile-backend endpoint requirements or JSON payloads evolve.
 
+## GitHub Issue & Task Management
+
+- **Use Native GitHub Sub-Issues**: When creating GitHub issues for milestones, epics, or multi-step tasks, decompose work into a **parent issue** and linked **child sub-issues** instead of relying solely on Markdown task checklists in a single issue body.
+- **Creating & Linking Sub-Issues via `gh api`**:
+  1. Create the parent issue with the appropriate `milestone` and labels (e.g. `frontend`, `enhancement`).
+  2. Create each actionable subtask as its own issue (with matching `milestone` and labels) and capture its numeric database `id` (not the issue `number`).
+  3. Link each child issue to the parent using the GitHub Sub-Issues API:
+     ```bash
+     gh api repos/{owner}/{repo}/issues/{parent_number}/sub_issues -F sub_issue_id={child_issue_id}
+     ```
+- **Add Issues to the GitHub Project (`@PKWMmap`)**:
+  - Add every newly created parent issue and sub-issue to the organization project **`@PKWMmap`** (owner `grupadotnet`, project `#15`, `https://github.com/orgs/grupadotnet/projects/15`):
+    ```bash
+    gh project item-add 15 --owner grupadotnet --url https://github.com/grupadotnet/PKWMmap/issues/{issue_number}
+    ```
+  - Note: `gh project` commands require the `project` OAuth scope (`gh auth refresh -s project`).
+- Close or update individual sub-issues as each subtask is completed so progress is reflected natively on the parent issue.
+
 ## Verification Before Finishing
 
 - Run Gradle build/tests for the affected KMP targets (`./gradlew check` or target compile tasks) once Gradle wrapper is initialized.
