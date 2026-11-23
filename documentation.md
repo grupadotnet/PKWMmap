@@ -56,3 +56,4 @@ Szczegółowa specyfikacja payloadów JSON dla każdego etapu znajduje się w pl
 
 ## Dodatkowe featury (jak zostanie czas)
 - **TTS** – głosowe kierowanie dla osób ze znacznymi problemami wzrokowymi (aplikacja odczytuje pole `instruction` zwracane przez backend dla kolejnych kroków w `GET /route`).
+- **Lokalizacja GSM / GPS (fallback na zewnątrz)** – w przypadku niewystarczających lub nieprawidłowych danych z beaconów BLE (np. gdy użytkownik znajduje się na zewnątrz poza budynkami), aplikacja wykorzystuje lokalizację z sieci GSM / GPS do określenia położenia na kampusie oraz wyznaczenia trasy do odpowiedniego budynku.
